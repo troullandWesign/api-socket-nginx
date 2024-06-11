@@ -65,11 +65,11 @@
 
     function connectUser() {
         const username = document.getElementById('username').value;
-
+    
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(position => {
                 const { latitude, longitude } = position.coords;
-
+    
                 // Send user data to server via a POST request
                 fetch('/users', {
                     method: 'POST',
@@ -86,16 +86,16 @@
                     if (data.user) {
                         currentUserId = data.user.id;
                         // Initialize WebSocket connection
-                        ws = new WebSocket('wss://thomas.roulland.caen.mds-project.fr:3000');
-
+                        ws = new WebSocket(`wss://${location.host}`);
+    
                         ws.onopen = () => {
                             // Send authentication message after connection is opened
                             ws.send(JSON.stringify({ type: 'authenticate', userId: data.user.id }));
                         };
-
+    
                         ws.onmessage = (event) => {
                             const message = JSON.parse(event.data);
-
+    
                             if (message.type === 'authenticated') {
                                 console.log('Authenticated:', message.user);
                                 console.log('All users:', message.users);
@@ -112,11 +112,11 @@
                                 }
                             }
                         };
-
+    
                         ws.onerror = (error) => {
                             console.error('WebSocket error:', error);
                         };
-
+    
                         ws.onclose = () => {
                             console.log('WebSocket connection closed');
                             isConnected = false;
@@ -139,6 +139,7 @@
             console.error('Geolocation not supported by this browser.');
         }
     }
+    
 
     function disconnectUser() {
         if (ws) {
