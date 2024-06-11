@@ -5,60 +5,168 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Real-Time Tracking App</title>
     <link rel="stylesheet" href="style.css">
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""></script>
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
 </head>
 <body>
-    <h1>Real-Time Tracking App</h1>
+<h1>Real time Tracker</h1>
+<div class="content">
     <div id="map"></div>
-    <div id="user-form">
-        <input type="text" id="username" placeholder="Enter your name">
-        <button id="add-user">Add User</button>
+    <div class="infos">
+        <form id="loginForm">
+            <p>Se connecter</p>
+            <input type="text" id="username" placeholder="Enter your username" required />
+            <button type="submit" id="connectButton">Connect</button>
+        </form>
+        <div id="user-list"></div>
     </div>
-    <div id="user-list"></div> <!-- Ajout de la div pour la liste des utilisateurs -->
-    <div id="accelerometer-data"></div>
-    <script>
+</div>
+<div id="accelerometer-data"></div>
 
-    const socket = new WebSocket('ws://localhost:3000');
+<script>
+    const loginForm = document.getElementById('loginForm');
+    const connectButton = document.getElementById('connectButton');
+    let ws;
+    let isConnected = false;
+    let currentUserId;
+    let currentUserMarker;
     const map = L.map('map').setView([46.603354, 1.888334], 6); // Centre de la France
+
+    loginForm.addEventListener('submit', event => {
+        event.preventDefault();
+        if (!isConnected) {
+            connectUser();
+        } else {
+            disconnectUser();
+        }
+    });
+
+    function connectUser() {
+        const username = document.getElementById('username').value;
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(position => {
+                const { latitude, longitude } = position.coords;
+
+                // Send user data to server via a POST request
+                fetch('/users', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: username,
+                        position: { lat: latitude, lon: longitude }
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.user) {
+                        currentUserId = data.user.id;
+                        // Initialize WebSocket connection
+                        ws = new WebSocket(`ws://${location.host}`);
+
+                        ws.onopen = () => {
+                            // Send authentication message after connection is opened
+                            ws.send(JSON.stringify({ type: 'authenticate', userId: data.user.id }));
+                        };
+
+                        ws.onmessage = (event) => {
+                            const message = JSON.parse(event.data);
+
+                            if (message.type === 'authenticated') {
+                                console.log('Authenticated:', message.user);
+                                console.log('All users:', message.users);
+                                isConnected = true;
+                                updateUserList(message.users);
+                                updateMapMarkers(message.users);
+                                connectButton.textContent = 'Disconnect';
+
+                                // Start watching position
+                                startWatchingPosition();
+                            } else if (message.type === 'update') {
+                                console.log('Updated users:', message.users);
+                                if (isConnected) {
+                                    updateUserList(message.users);
+                                    updateMapMarkers(message.users);
+                                }
+                            }
+                        };
+
+                        ws.onerror = (error) => {
+                            console.error('WebSocket error:', error);
+                        };
+
+                        ws.onclose = () => {
+                            console.log('WebSocket connection closed');
+                            isConnected = false;
+                            clearMapMarkers();
+                            clearUserList();
+                            connectButton.textContent = 'Connect';
+                        };
+                    }
+                });
+            }, error => {
+                console.error('Geolocation error:', error);
+            });
+        } else {
+            console.error('Geolocation not supported by this browser.');
+        }
+    }
+
+    function startWatchingPosition() {
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(position => {
+                const { latitude, longitude } = position.coords;
+
+                // Update user position on the server
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'updatePosition', userId: currentUserId, position: { lat: latitude, lon: longitude } }));
+                }
+
+                // Update user marker on the map
+                if (currentUserMarker) {
+                    currentUserMarker.setLatLng([latitude, longitude]).update();
+                }
+            }, error => {
+                console.error('Geolocation error:', error);
+            }, { enableHighAccuracy: true });
+        }
+    }
+
+    function disconnectUser() {
+        if (ws) {
+            fetch(`/users/${currentUserId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data.message);
+                clearMapMarkers();
+                clearUserList();
+                ws.close();
+            })
+            .catch(error => {
+                console.error('Error deleting user:', error);
+            });
+        }
+    }
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    const usernameInput = document.getElementById('username');
-    const addUserButton = document.getElementById('add-user');
     const userListDiv = document.getElementById('user-list');
     const accelerometerDataDiv = document.getElementById('accelerometer-data');
 
-    let username;
     let markers = {};
-    let currentPosition = null;
-
-    addUserButton.addEventListener('click', () => {
-        username = usernameInput.value.trim();
-        if (username) {
-            navigator.geolocation.getCurrentPosition(position => {
-                currentPosition = position.coords;
-                const { latitude, longitude } = currentPosition;
-                fetch('/users', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: username, position: { lat: latitude, lon: longitude } })
-                }).then(response => response.json())
-                  .then(data => {
-                      console.log('User added:', data);
-                      fetchUsersAndUpdate();
-                  });
-            });
-        }
-    });
 
     function fetchUsersAndUpdate() {
+        if (!isConnected) return;
         fetch('/users')
             .then(response => response.json())
             .then(users => {
@@ -79,6 +187,10 @@
         });
     }
 
+    function clearUserList() {
+        userListDiv.innerHTML = '';
+    }
+
     userListDiv.addEventListener('click', (event) => {
         if (event.target.classList.contains('delete-user')) {
             const userId = event.target.dataset.id;
@@ -88,31 +200,31 @@
 
     function updateMapMarkers(users) {
         console.log('Updating map markers:', users);
-        let lastUser;
-        for (const marker of Object.values(markers)) {
-            map.removeLayer(marker);
-        }
-        markers = {};
+        clearMapMarkers();
+        let lastMarker;
         users.forEach(user => {
             if (user) {
                 const { latitude, longitude } = user;
                 const marker = L.marker([latitude, longitude]).addTo(map)
-                    .bindPopup(`${user.username}<br>Lat: ${latitude}<br>Lon: ${longitude}`)
-                    .openPopup();
+                    .bindPopup(`${user.username}<br>Lat: ${latitude}<br>Lon: ${longitude}`);
                 markers[user.username] = marker;
-                lastUser = user;
+                if (user.id === currentUserId) {
+                    currentUserMarker = marker;
+                }
+                lastMarker = marker;
             }
         });
-        if (lastUser) {
-            const { latitude, longitude } = lastUser;
-            map.setView([latitude, longitude], 9);
-            const circle = L.circle([latitude, longitude], {
-                color: 'blue',
-                fillColor: '#30f',
-                fillOpacity: 0.2,
-                radius: 15000 // 15 km
-            }).addTo(map);
+        if (lastMarker) {
+            lastMarker.openPopup();
+            map.setView(lastMarker.getLatLng(), 20);
         }
+    }
+
+    function clearMapMarkers() {
+        for (const marker of Object.values(markers)) {
+            map.removeLayer(marker);
+        }
+        markers = {};
     }
 
     function deleteUser(userId) {
@@ -120,22 +232,15 @@
         fetch(`/users/${userId}`, {
             method: 'DELETE'
         })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
+        .then(response => response.json())
         .then(data => {
             console.log(data.message);
-            fetchUsersAndUpdate();
+            fetchUsersAndUpdate(); // Mettre à jour la liste après la suppression
         })
         .catch(error => {
             console.error('Error deleting user:', error);
         });
     }
-
-    fetchUsersAndUpdate();
 
     if ('Accelerometer' in window) {
         const accelerometer = new Accelerometer({ frequency: 1 });
@@ -152,6 +257,6 @@
         accelerometerDataDiv.innerHTML = '<p>Accelerometer not supported</p>';
     }
 
-    </script>
+</script>
 </body>
 </html>

@@ -24,7 +24,7 @@ db.connect(err => {
 
 app.use(express.static('public'));
 app.use(express.json());
-// API RESTful pour gérer les utilisateurs
+
 app.post('/users', (req, res) => {
     const { name, position } = req.body;
     const { lat, lon } = position;
@@ -35,6 +35,7 @@ app.post('/users', (req, res) => {
             return;
         }
         res.status(201).json({ message: 'User added', user: { id: result.insertId, username: name, latitude: lat, longitude: lon } });
+        broadcastUsers();  // Broadcast updated user list after adding a new user
     });
 });
 
@@ -57,6 +58,7 @@ app.delete('/users/:id', (req, res) => {
             return;
         }
         res.json({ message: 'User deleted successfully' });
+        broadcastUsers();  // Broadcast updated user list after deleting a user
     });
 });
 
@@ -64,55 +66,44 @@ let users = [];
 
 wss.on('connection', ws => {
     console.log('Client connected');
-    db.query('SELECT * FROM users', (err, results) => {
-        if (err) {
-            console.error('Database error:', err);
-            return;
-        }
+    let userId;
+    let userData;
 
-        const users = results.map(user => ({
-            username: user.username,
-            position: { lat: user.latitude, lon: user.longitude }
-        }));
-
-        ws.send(JSON.stringify({ users }));
-    });
-    ws.on('message', (message) => {
+    ws.on('message', message => {
         const data = JSON.parse(message);
-        const { name, position } = data;
-        const { lat, lon } = position;
 
-        db.query('UPDATE users SET latitude = ?, longitude = ? WHERE username = ?', [lat, lon, name], (err, result) => {
-            if (err) {
-                console.error('Database error:', err);
-                return;
-            }
-
-            // Diffuser la mise à jour à tous les clients connectés
-            db.query('SELECT * FROM users', (err, results) => {
-                if (err) {
-                    console.error('Database error:', err);
+        if (data.type === 'authenticate') {
+            userId = data.userId;
+            db.query('SELECT * FROM users WHERE id = ?', [userId], (err, result) => {
+                if (err || result.length === 0) {
+                    ws.send(JSON.stringify({ type: 'error', message: 'Authentication failed' }));
+                    ws.close();
                     return;
                 }
 
-                const users = results.map(user => ({
-                    username: user.username,
-                    position: { lat: user.latitude, lon: user.longitude }
-                }));
+                userData = result[0];
+                users.push(userData);
 
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({ users }));
-                    }
-                });
+                ws.send(JSON.stringify({ type: 'authenticated', user: userData, users: users }));
+                broadcastUsers();
             });
-        });
+        } else if (data.type === 'updatePosition') {
+            const { lat, lon } = data.position;
+            db.query('UPDATE users SET latitude = ?, longitude = ? WHERE id = ?', [lat, lon, data.userId], err => {
+                if (err) {
+                    console.error('Error updating user position:', err);
+                    return;
+                }
+                broadcastUsers();
+            });
+        }
     });
+
     ws.on('close', () => {
         console.log('Client disconnected');
         if (userData) {
-            users = users.filter(user => user.id !== userId);
-            broadcastUsers();
+            users = users.filter(user => user.id !== userData.id);
+            broadcastUsers(userData.id); // Passez l'ID de l'utilisateur déconnecté
         }
     });
 
@@ -121,15 +112,22 @@ wss.on('connection', ws => {
     });
 });
 
-function broadcastUsers() {
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(users));
+function broadcastUsers(excludedUserId) {
+    db.query('SELECT * FROM users', (err, results) => {
+        if (err) {
+            console.error('Error fetching users:', err);
+            return;
         }
+        const filteredUsers = results.filter(user => user.id !== excludedUserId);
+        wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({ type: 'update', users: filteredUsers }));
+            }
+        });
     });
 }
 
 const PORT = 3000;
 server.listen(PORT, () => {
-    console.log('Server is running on port'. $PORT);
+    console.log(`Server is running on port ${PORT}`);
 });
