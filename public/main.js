@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+
     const ws = new WebSocket('ws://thomas.roulland.caen.mds-project.fr:3000/');
     const map = L.map('map').setView([46.603354, 1.888334], 6); // Centre de la France
 
@@ -127,4 +127,3 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         accelerometerDataDiv.innerHTML = '<p>Accelerometer not supported</p>';
     }
-});
