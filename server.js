@@ -4,6 +4,7 @@ const WebSocket = require('ws');
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+const mysql = require('mysql');
 
 // Configuration de la connexion MySQL
 const db = mysql.createConnection({
