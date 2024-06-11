@@ -23,7 +23,7 @@ db.connect(err => {
 
 const app = express();
 const httpServer = http.createServer(app);
-const wss = new WebSocket.Server({ server: httpServer });
+const wss = new WebSocket.Server({ httpServer });
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
