@@ -1,8 +1,9 @@
 const express = require('express');
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
 const WebSocket = require('ws');
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 const mysql = require('mysql');
 
 // Configuration de la connexion MySQL
@@ -21,13 +22,8 @@ db.connect(err => {
     console.log('Connected to MySQL');
 });
 
-const app = express();
-const httpServer = http.createServer(app);
-const wss = new WebSocket.Server({ httpServer });
-
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 app.use(express.json());
-
 // API RESTful pour gérer les utilisateurs
 app.post('/users', (req, res) => {
     const { name, position } = req.body;
@@ -64,8 +60,10 @@ app.delete('/users/:id', (req, res) => {
     });
 });
 
-// WebSocket pour la communication en temps réel
-wss.on('connection', (ws) => {
+let users = [];
+
+wss.on('connection', ws => {
+    console.log('Client connected');
     db.query('SELECT * FROM users', (err, results) => {
         if (err) {
             console.error('Database error:', err);
@@ -79,7 +77,6 @@ wss.on('connection', (ws) => {
 
         ws.send(JSON.stringify({ users }));
     });
-
     ws.on('message', (message) => {
         const data = JSON.parse(message);
         const { name, position } = data;
@@ -111,10 +108,28 @@ wss.on('connection', (ws) => {
             });
         });
     });
+    ws.on('close', () => {
+        console.log('Client disconnected');
+        if (userData) {
+            users = users.filter(user => user.id !== userId);
+            broadcastUsers();
+        }
+    });
+
+    ws.on('error', error => {
+        console.error('WebSocket error:', error);
+    });
 });
 
-const PORT = 3000;
+function broadcastUsers() {
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(users));
+        }
+    });
+}
 
-httpServer.listen(PORT, () => {
-    console.log(`Server is running on http://thomas.roulland.caen.mds-project.fr:${PORT}`);
+const PORT = 3000;
+server.listen(PORT, () => {
+    console.log('Server is running on port'. $PORT);
 });
