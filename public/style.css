@@ -29,8 +29,8 @@ h1 {
     margin: 20px 0;
 }
 
-#accelerometer-data {
-    margin: 20px 0;
+#accelerometer-data,#user-list {
+    margin: 25px 50px;
 }
 
 .content {
@@ -43,4 +43,16 @@ h1 {
 .infos {
     align-content: center;
     justify-self: center;
+}
+
+#username,#cameraButton {
+    margin-bottom: 25px;
+}
+
+button {
+    border: none;
+    padding: 10px;
+    background-color: blueviolet;
+    border-radius: 5px;
+    color: white;
 }

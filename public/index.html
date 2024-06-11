@@ -21,15 +21,20 @@
             <p>Se connecter</p>
             <input type="text" id="username" placeholder="Enter your username" required />
             <button type="submit" id="connectButton">Connect</button>
+            <button type="button" id="cameraButton" style="display:none;">Activer la caméra</button>
         </form>
-        <div id="user-list"></div>
+        <video id="video" width="320" height="240" autoplay style="display:none;"></video>
     </div>
 </div>
+<div id="user-list"></div>
 <div id="accelerometer-data"></div>
+
 
 <script>
     const loginForm = document.getElementById('loginForm');
     const connectButton = document.getElementById('connectButton');
+    const cameraButton = document.getElementById('cameraButton');
+    const video = document.getElementById('video');
     let ws;
     let isConnected = false;
     let currentUserId;
@@ -42,6 +47,19 @@
             connectUser();
         } else {
             disconnectUser();
+        }
+    });
+
+    cameraButton.addEventListener('click', () => {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+                video.srcObject = stream;
+                video.style.display = 'block';
+            }).catch(error => {
+                console.error('Error accessing camera:', error);
+            });
+        } else {
+            console.error('getUserMedia not supported on your browser!');
         }
     });
 
@@ -68,7 +86,7 @@
                     if (data.user) {
                         currentUserId = data.user.id;
                         // Initialize WebSocket connection
-                        ws = new WebSocket('ws://localhost:3000');
+                        ws = new WebSocket(`ws://${location.host}`);
 
                         ws.onopen = () => {
                             // Send authentication message after connection is opened
@@ -85,9 +103,7 @@
                                 updateUserList(message.users);
                                 updateMapMarkers(message.users);
                                 connectButton.textContent = 'Disconnect';
-
-                                // Start watching position
-                                startWatchingPosition();
+                                cameraButton.style.display = 'block';
                             } else if (message.type === 'update') {
                                 console.log('Updated users:', message.users);
                                 if (isConnected) {
@@ -107,6 +123,12 @@
                             clearMapMarkers();
                             clearUserList();
                             connectButton.textContent = 'Connect';
+                            cameraButton.style.display = 'none';
+                            video.style.display = 'none';
+                            if (video.srcObject) {
+                                video.srcObject.getTracks().forEach(track => track.stop());
+                                video.srcObject = null;
+                            }
                         };
                     }
                 });
@@ -115,26 +137,6 @@
             });
         } else {
             console.error('Geolocation not supported by this browser.');
-        }
-    }
-
-    function startWatchingPosition() {
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(position => {
-                const { latitude, longitude } = position.coords;
-
-                // Update user position on the server
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: 'updatePosition', userId: currentUserId, position: { lat: latitude, lon: longitude } }));
-                }
-
-                // Update user marker on the map
-                if (currentUserMarker) {
-                    currentUserMarker.setLatLng([latitude, longitude]).update();
-                }
-            }, error => {
-                console.error('Geolocation error:', error);
-            }, { enableHighAccuracy: true });
         }
     }
 
@@ -201,23 +203,18 @@
     function updateMapMarkers(users) {
         console.log('Updating map markers:', users);
         clearMapMarkers();
-        let lastMarker;
         users.forEach(user => {
-            if (user) {
-                const { latitude, longitude } = user;
-                const marker = L.marker([latitude, longitude]).addTo(map)
-                    .bindPopup(`${user.username}<br>Lat: ${latitude}<br>Lon: ${longitude}`);
-                markers[user.username] = marker;
-                if (user.id === currentUserId) {
-                    currentUserMarker = marker;
-                }
-                lastMarker = marker;
+            const { latitude, longitude } = user;
+            const marker = L.marker([latitude, longitude]).addTo(map)
+                .bindPopup(`${user.username}<br>Lat: ${latitude}<br>Lon: ${longitude}`);
+            markers[user.username] = marker;
+
+            if (user.id === currentUserId) {
+                currentUserMarker = marker;
+                marker.openPopup();
+                map.setView([latitude, longitude], 11   );
             }
         });
-        if (lastMarker) {
-            lastMarker.openPopup();
-            map.setView(lastMarker.getLatLng(), 20);
-        }
     }
 
     function clearMapMarkers() {

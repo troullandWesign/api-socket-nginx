@@ -87,16 +87,9 @@ wss.on('connection', ws => {
                 ws.send(JSON.stringify({ type: 'authenticated', user: userData, users: users }));
                 broadcastUsers();
             });
-        } else if (data.type === 'updatePosition') {
-            const { lat, lon } = data.position;
-            db.query('UPDATE users SET latitude = ?, longitude = ? WHERE id = ?', [lat, lon, data.userId], err => {
-                if (err) {
-                    console.error('Error updating user position:', err);
-                    return;
-                }
-                broadcastUsers();
-            });
         }
+
+        // Rest of your message handling logic here
     });
 
     ws.on('close', () => {
