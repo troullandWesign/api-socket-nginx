@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const ws = new WebSocket('ws://thomas.roulland.caen.mds-project.fr:3000/');
     const map = L.map('map').setView([46.603354, 1.888334], 6); // Centre de la France
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
