@@ -28,7 +28,6 @@
 <div id="accelerometer-data"></div>
 
 <script>
-    const socket = new WebSocket('wss://thomas.roulland.caen.mds-project.fr:3000');
     const loginForm = document.getElementById('loginForm');
     const connectButton = document.getElementById('connectButton');
     let ws;
@@ -69,7 +68,7 @@
                     if (data.user) {
                         currentUserId = data.user.id;
                         // Initialize WebSocket connection
-                        ws = new WebSocket(`ws://${location.host}`);
+                        ws = new WebSocket('ws://thomas.roulland.caen.mds-project.fr:3000');
 
                         ws.onopen = () => {
                             // Send authentication message after connection is opened
