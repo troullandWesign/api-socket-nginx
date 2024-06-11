@@ -28,6 +28,7 @@
 <div id="accelerometer-data"></div>
 
 <script>
+    const socket = new WebSocket('wss://thomas.roulland.caen.mds-project.fr:3000');
     const loginForm = document.getElementById('loginForm');
     const connectButton = document.getElementById('connectButton');
     let ws;
