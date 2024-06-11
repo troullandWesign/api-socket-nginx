@@ -24,12 +24,11 @@ h1 {
     color: red;
 }
 
-
 #user-list {
     margin: 20px 0;
 }
 
-#accelerometer-data,#user-list {
+#accelerometer-data, #user-list {
     margin: 25px 50px;
 }
 
@@ -45,7 +44,7 @@ h1 {
     justify-self: center;
 }
 
-#username,#cameraButton {
+#username, #cameraButton {
     margin-bottom: 25px;
 }
 
@@ -55,4 +54,20 @@ button {
     background-color: blueviolet;
     border-radius: 5px;
     color: white;
+}
+
+/* Media query for mobile devices */
+@media (max-width: 768px) {
+    .content {
+        grid-template-columns: 1fr;
+        padding: 0 20px;
+    }
+
+    #map {
+        height: 250px;
+    }
+
+    h1, #accelerometer-data, #user-list {
+        margin: 20px;
+    }
 }
