@@ -29,7 +29,6 @@
 <div id="user-list"></div>
 <div id="accelerometer-data"></div>
 
-
 <script>
     const loginForm = document.getElementById('loginForm');
     const connectButton = document.getElementById('connectButton');
@@ -41,6 +40,7 @@
     let currentUserMarker;
     const map = L.map('map').setView([46.603354, 1.888334], 6); // Centre de la France
 
+    // Écouteur d'événements pour la soumission du formulaire de connexion
     loginForm.addEventListener('submit', event => {
         event.preventDefault();
         if (!isConnected) {
@@ -50,27 +50,29 @@
         }
     });
 
+    // Écouteur d'événements pour activer la caméra
     cameraButton.addEventListener('click', () => {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
             navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
                 video.srcObject = stream;
                 video.style.display = 'block';
             }).catch(error => {
-                console.error('Error accessing camera:', error);
+                console.error('Erreur d\'accès à la caméra :', error);
             });
         } else {
-            console.error('getUserMedia not supported on your browser!');
+            console.error('getUserMedia non supporté par votre navigateur !');
         }
     });
 
+    // Fonction pour gérer la connexion de l'utilisateur
     function connectUser() {
         const username = document.getElementById('username').value;
-    
+
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(position => {
                 const { latitude, longitude } = position.coords;
-    
-                // Send user data to server via a POST request
+
+                // Envoi des données de l'utilisateur au serveur via une requête POST
                 fetch('/users', {
                     method: 'POST',
                     headers: {
@@ -85,40 +87,40 @@
                 .then(data => {
                     if (data.user) {
                         currentUserId = data.user.id;
-                        // Initialize WebSocket connection
+                        // Initialisation de la connexion WebSocket
                         ws = new WebSocket(`wss://${location.host}`);
-    
+
                         ws.onopen = () => {
-                            // Send authentication message after connection is opened
+                            // Envoi d'un message d'authentification après l'ouverture de la connexion
                             ws.send(JSON.stringify({ type: 'authenticate', userId: data.user.id }));
                         };
-    
+
                         ws.onmessage = (event) => {
                             const message = JSON.parse(event.data);
-    
+
                             if (message.type === 'authenticated') {
-                                console.log('Authenticated:', message.user);
-                                console.log('All users:', message.users);
+                                console.log('Authentifié :', message.user);
+                                console.log('Tous les utilisateurs :', message.users);
                                 isConnected = true;
                                 updateUserList(message.users);
                                 updateMapMarkers(message.users);
                                 connectButton.textContent = 'Disconnect';
                                 cameraButton.style.display = 'block';
                             } else if (message.type === 'update') {
-                                console.log('Updated users:', message.users);
+                                console.log('Utilisateurs mis à jour :', message.users);
                                 if (isConnected) {
                                     updateUserList(message.users);
                                     updateMapMarkers(message.users);
                                 }
                             }
                         };
-    
+
                         ws.onerror = (error) => {
-                            console.error('WebSocket error:', error);
+                            console.error('Erreur WebSocket :', error);
                         };
-    
+
                         ws.onclose = () => {
-                            console.log('WebSocket connection closed');
+                            console.log('Connexion WebSocket fermée');
                             isConnected = false;
                             clearMapMarkers();
                             clearUserList();
@@ -133,14 +135,14 @@
                     }
                 });
             }, error => {
-                console.error('Geolocation error:', error);
+                console.error('Erreur de géolocalisation :', error);
             });
         } else {
-            console.error('Geolocation not supported by this browser.');
+            console.error('Géolocalisation non supportée par ce navigateur.');
         }
     }
-    
 
+    // Fonction pour gérer la déconnexion de l'utilisateur
     function disconnectUser() {
         if (ws) {
             fetch(`/users/${currentUserId}`, {
@@ -154,11 +156,12 @@
                 ws.close();
             })
             .catch(error => {
-                console.error('Error deleting user:', error);
+                console.error('Erreur de suppression de l\'utilisateur :', error);
             });
         }
     }
 
+    // Initialisation de la carte avec les tuiles OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
@@ -168,20 +171,22 @@
 
     let markers = {};
 
+    // Fonction pour récupérer les utilisateurs et mettre à jour l'interface utilisateur
     function fetchUsersAndUpdate() {
         if (!isConnected) return;
         fetch('/users')
             .then(response => response.json())
             .then(users => {
-                console.log('Fetched users:', users);
+                console.log('Utilisateurs récupérés :', users);
                 updateUserList(users);
                 updateMapMarkers(users);
             });
     }
 
+    // Fonction pour mettre à jour la liste des utilisateurs
     function updateUserList(users) {
-        console.log('Updating user list:', users);
-        userListDiv.innerHTML = '<h3>Active Users:</h3>';
+        console.log('Mise à jour de la liste des utilisateurs :', users);
+        userListDiv.innerHTML = '<h3>Utilisateurs actifs :</h3>';
         users.forEach(user => {
             if (user) {
                 const deleteUserButton = `<span class="delete-user" data-id="${user.id}">&times;</span>`;
@@ -190,10 +195,12 @@
         });
     }
 
+    // Fonction pour vider la liste des utilisateurs de l'interface utilisateur
     function clearUserList() {
         userListDiv.innerHTML = '';
     }
 
+    // Écouteur d'événements pour gérer la suppression des utilisateurs de la liste
     userListDiv.addEventListener('click', (event) => {
         if (event.target.classList.contains('delete-user')) {
             const userId = event.target.dataset.id;
@@ -201,8 +208,9 @@
         }
     });
 
+    // Fonction pour mettre à jour les marqueurs sur la carte pour tous les utilisateurs
     function updateMapMarkers(users) {
-        console.log('Updating map markers:', users);
+        console.log('Mise à jour des marqueurs sur la carte :', users);
         clearMapMarkers();
         users.forEach(user => {
             const { latitude, longitude } = user;
@@ -213,11 +221,12 @@
             if (user.id === currentUserId) {
                 currentUserMarker = marker;
                 marker.openPopup();
-                map.setView([latitude, longitude], 11   );
+                map.setView([latitude, longitude], 13); // Niveau de zoom fixé à 12
             }
         });
     }
 
+    // Fonction pour supprimer tous les marqueurs de la carte
     function clearMapMarkers() {
         for (const marker of Object.values(markers)) {
             map.removeLayer(marker);
@@ -225,8 +234,9 @@
         markers = {};
     }
 
+    // Fonction pour supprimer un utilisateur du serveur
     function deleteUser(userId) {
-        console.log('Deleting user:', userId);
+        console.log('Suppression de l\'utilisateur :', userId);
         fetch(`/users/${userId}`, {
             method: 'DELETE'
         })
@@ -236,15 +246,16 @@
             fetchUsersAndUpdate(); // Mettre à jour la liste après la suppression
         })
         .catch(error => {
-            console.error('Error deleting user:', error);
+            console.error('Erreur de suppression de l\'utilisateur :', error);
         });
     }
 
+    // Initialiser l'API de l'accéléromètre si elle est supportée
     if ('Accelerometer' in window) {
         const accelerometer = new Accelerometer({ frequency: 1 });
         accelerometer.addEventListener('reading', () => {
             accelerometerDataDiv.innerHTML = `
-                <h3>Accelerometer Data:</h3>
+                <h3>Données de l'accéléromètre :</h3>
                 <p>X: ${accelerometer.x.toFixed(2)}</p>
                 <p>Y: ${accelerometer.y.toFixed(2)}</p>
                 <p>Z: ${accelerometer.z.toFixed(2)}</p>
@@ -252,7 +263,7 @@
         });
         accelerometer.start();
     } else {
-        accelerometerDataDiv.innerHTML = '<p>Accelerometer not supported</p>';
+        accelerometerDataDiv.innerHTML = '<p>Accéléromètre non supporté</p>';
     }
 
 </script>
